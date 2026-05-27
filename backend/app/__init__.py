@@ -1,0 +1,1 @@
+"""SmartStock Pro backend package."""

@@ -1,0 +1,87 @@
+@import url('https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@400;500;600;700;800&display=swap');
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  background: #f8f9ff;
+  color: #191c1e;
+  font-family: "Plus Jakarta Sans", Inter, ui-sans-serif, system-ui, sans-serif;
+}
+
+input,
+select,
+textarea {
+  outline: none;
+}
+
+.tabular-nums {
+  font-variant-numeric: tabular-nums;
+}
+
+::-webkit-scrollbar {
+  width: 6px;
+  height: 6px;
+}
+
+::-webkit-scrollbar-thumb {
+  background: #c5c6cd;
+  border-radius: 9999px;
+}
+
+@layer components {
+  .page-shell {
+    @apply space-y-7;
+  }
+
+  .page-title {
+    @apply text-xl font-extrabold tracking-tight text-navy md:text-3xl md:leading-tight;
+  }
+
+  .page-subtitle {
+    @apply mt-1 text-sm leading-6 text-slate;
+  }
+
+  .card {
+    @apply rounded-[2rem] border-0 bg-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal;
+  }
+
+  .card-static {
+    @apply rounded-[2rem] border-0 bg-white shadow-card;
+  }
+
+  .btn-primary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full bg-navy px-5 py-3 text-sm font-bold text-white shadow-[0_14px_28px_rgba(0,23,54,0.18)] transition duration-200 hover:bg-navy-soft active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .btn-secondary {
+    @apply inline-flex items-center justify-center gap-2 rounded-full border-0 bg-blue-soft px-5 py-3 text-sm font-bold text-navy transition duration-200 hover:bg-blue-active active:scale-[0.98] disabled:cursor-not-allowed disabled:opacity-60;
+  }
+
+  .icon-button {
+    @apply inline-flex h-10 w-10 items-center justify-center rounded-full text-navy transition duration-200 hover:bg-blue-soft active:scale-[0.96];
+  }
+
+  .field {
+    @apply h-11 rounded-full border-0 bg-blue-soft px-4 text-sm text-navy transition duration-200 placeholder:text-slate focus:bg-white focus:ring-2 focus:ring-navy/15;
+  }
+
+  .label {
+    @apply text-[11px] font-bold uppercase tracking-wide text-slate;
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full border-0 px-3 py-1 text-xs font-bold uppercase;
+  }
+
+  .section-title {
+    @apply text-lg font-bold text-navy md:text-xl;
+  }
+}
