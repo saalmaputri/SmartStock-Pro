@@ -17,7 +17,7 @@ from fastapi.staticfiles import StaticFiles
 from reportlab.lib import colors
 from reportlab.lib.pagesizes import A4
 from reportlab.pdfgen import canvas
-from sqlalchemy import func, or_
+from sqlalchemy import func, or_, text
 from sqlalchemy.orm import Session
 
 from . import auth, models, schemas
@@ -39,6 +39,12 @@ app.mount("/uploads", StaticFiles(directory=str(UPLOAD_DIR)), name="uploads")
 JOB_QUEUE: dict[str, dict] = {}
 
 
+def create_notification(db: Session, type_: str, title: str, message: str, severity: str = "info", target_role: str = "Admin"):
+    notification = models.Notification(type=type_, title=title, message=message, severity=severity, target_role=target_role)
+    db.add(notification)
+    return notification
+
+
 @app.middleware("http")
 async def security_middleware(request: Request, call_next):
     if request.method in {"POST", "PUT", "PATCH", "DELETE"}:
@@ -57,6 +63,14 @@ async def security_middleware(request: Request, call_next):
                 path=str(request.url.path),
                 method=request.method,
             ))
+            create_notification(
+                db,
+                "error",
+                "Error Aplikasi",
+                f"{request.method} {request.url.path}: {exc}",
+                "critical",
+                "Admin",
+            )
             db.commit()
         finally:
             db.close()
@@ -124,7 +138,7 @@ def seed(db: Session):
             unit="unit",
             purchase_price=50000 * idx,
             selling_price=65000 * idx,
-            min_stock=10 + idx,
+            min_stock=15,
         ))
     db.add_all(products)
     db.flush()
@@ -142,12 +156,53 @@ def seed(db: Session):
     db.commit()
 
 
+def ensure_company_warehouses(db: Session):
+    company_warehouses = [
+        {"name": "Gudang Jakarta", "code": "JKT", "city": "Jakarta", "address": "Jl. Raya Cakung Cilincing No. 88, Jakarta Timur", "latitude": -6.1865, "longitude": 106.9581},
+        {"name": "Gudang Surabaya", "code": "SBY", "city": "Surabaya", "address": "Jl. Margomulyo Industri No. 21, Surabaya", "latitude": -7.2458, "longitude": 112.6712},
+        {"name": "Gudang Bandung", "code": "BDG", "city": "Bandung", "address": "Jl. Soekarno Hatta No. 512, Bandung", "latitude": -6.9468, "longitude": 107.6469},
+        {"name": "Gudang Medan", "code": "MDN", "city": "Medan", "address": "Jl. Cemara Boulevard No. 17, Medan", "latitude": 3.6376, "longitude": 98.7041},
+        {"name": "Gudang Makassar", "code": "MKS", "city": "Makassar", "address": "Jl. Perintis Kemerdekaan Km. 12, Makassar", "latitude": -5.1354, "longitude": 119.4928},
+    ]
+    for data in company_warehouses:
+        warehouse = db.query(models.Warehouse).filter_by(code=data["code"]).first()
+        if warehouse:
+            for key, value in data.items():
+                setattr(warehouse, key, value)
+            warehouse.is_active = True
+        else:
+            db.add(models.Warehouse(**data, is_active=True))
+    db.commit()
+
+
+def ensure_default_product_threshold(db: Session):
+    db.query(models.Product).update({models.Product.min_stock: 15})
+    db.commit()
+
+
+def ensure_schema_upgrades():
+    if not str(engine.url).startswith("sqlite"):
+        return
+    with engine.begin() as conn:
+        transfer_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(transfers)")).fetchall()}
+        if "approved_by_id" not in transfer_columns:
+            conn.execute(text("ALTER TABLE transfers ADD COLUMN approved_by_id INTEGER"))
+        if "approved_at" not in transfer_columns:
+            conn.execute(text("ALTER TABLE transfers ADD COLUMN approved_at DATETIME"))
+        transaction_columns = {row[1] for row in conn.execute(text("PRAGMA table_info(transactions)")).fetchall()}
+        if "supplier_id" not in transaction_columns:
+            conn.execute(text("ALTER TABLE transactions ADD COLUMN supplier_id INTEGER"))
+
+
 @app.on_event("startup")
 def on_startup():
     Base.metadata.create_all(bind=engine)
+    ensure_schema_upgrades()
     db = next(get_db())
     try:
         seed(db)
+        ensure_company_warehouses(db)
+        ensure_default_product_threshold(db)
     finally:
         db.close()
 
@@ -341,6 +396,13 @@ def delete_warehouse(item_id: int, db: Session = Depends(get_db), user: models.U
 
 def product_row(product: models.Product, db: Session):
     qty = db.query(func.coalesce(func.sum(models.StockBalance.quantity), 0)).filter(models.StockBalance.product_id == product.id).scalar() or 0
+    warehouse_stocks = [{
+        "warehouse_id": row.warehouse_id,
+        "warehouse_name": row.warehouse.name if row.warehouse else "-",
+        "quantity": row.quantity,
+        "min_stock": product.min_stock,
+        "status": "empty" if row.quantity <= 0 else "low" if row.quantity <= product.min_stock else "safe",
+    } for row in db.query(models.StockBalance).filter(models.StockBalance.product_id == product.id).all()]
     return {
         "id": product.id, "name": product.name, "sku": product.sku,
         "category_id": product.category_id, "supplier_id": product.supplier_id,
@@ -350,6 +412,7 @@ def product_row(product: models.Product, db: Session):
         "unit": product.unit, "purchase_price": product.purchase_price,
         "selling_price": product.selling_price, "price": product.selling_price,
         "min_stock": product.min_stock, "quantity": int(qty), "is_active": product.is_active,
+        "warehouse_stocks": warehouse_stocks,
     }
 
 
@@ -401,6 +464,9 @@ def products(
 @app.post("/products")
 def create_product(payload: schemas.ProductIn, db: Session = Depends(get_db), user: models.User = Depends(auth.require_roles("Admin", "Manajer Gudang"))):
     data = payload.model_dump()
+    warehouse_id = data.pop("warehouse_id", None)
+    initial_quantity = int(data.pop("initial_quantity", 0) or 0)
+    initial_stocks = data.pop("initial_stocks", {}) or {}
     if not data.get("sku"):
         data["sku"] = f"SKU-{db.query(models.Product).count() + 1:03d}"
     if not data.get("category_id"):
@@ -409,6 +475,20 @@ def create_product(payload: schemas.ProductIn, db: Session = Depends(get_db), us
     item = models.Product(**data)
     db.add(item)
     db.flush()
+    if initial_stocks:
+        for stock_warehouse_id, quantity in initial_stocks.items():
+            warehouse = db.get(models.Warehouse, int(stock_warehouse_id))
+            if not warehouse:
+                raise HTTPException(status_code=404, detail=f"Gudang {stock_warehouse_id} tidak ditemukan")
+            db.add(models.StockBalance(product_id=item.id, warehouse_id=warehouse.id, quantity=max(int(quantity or 0), 0)))
+    elif warehouse_id:
+        warehouse = db.get(models.Warehouse, warehouse_id)
+        if not warehouse:
+            raise HTTPException(status_code=404, detail="Gudang tidak ditemukan")
+        db.add(models.StockBalance(product_id=item.id, warehouse_id=warehouse_id, quantity=max(initial_quantity, 0)))
+    else:
+        for warehouse in db.query(models.Warehouse).filter(models.Warehouse.is_active == True).all():
+            db.add(models.StockBalance(product_id=item.id, warehouse_id=warehouse.id, quantity=0))
     audit(db, user, "create", "products", str(item.id))
     db.commit()
     db.refresh(item)
@@ -417,7 +497,19 @@ def create_product(payload: schemas.ProductIn, db: Session = Depends(get_db), us
 
 @app.put("/products/{item_id}")
 def update_product(item_id: int, payload: schemas.ProductIn, db: Session = Depends(get_db), user: models.User = Depends(auth.require_roles("Admin", "Manajer Gudang"))):
-    return product_row(crud_update(models.Product, item_id, payload, db, user, "products"), db)
+    data = payload.model_dump()
+    data.pop("warehouse_id", None)
+    data.pop("initial_quantity", None)
+    data.pop("initial_stocks", None)
+    item = db.get(models.Product, item_id)
+    if not item:
+        raise HTTPException(status_code=404, detail="Data tidak ditemukan")
+    for key, value in data.items():
+        setattr(item, key, value)
+    audit(db, user, "update", "products", str(item_id))
+    db.commit()
+    db.refresh(item)
+    return product_row(item, db)
 
 
 @app.delete("/products/{item_id}")
@@ -443,7 +535,7 @@ def normalize_import_row(row: dict):
         "name": name,
         "category_name": (row.get("category_name") or "Umum").strip(),
         "supplier_name": (row.get("supplier_name") or "Import").strip(),
-        "min_stock": int(row.get("min_stock") or 5),
+        "min_stock": int(row.get("min_stock") or 15),
         "selling_price": float(row.get("price") or row.get("selling_price") or 0),
         "purchase_price": float(row.get("purchase_price") or 0),
         "unit": (row.get("unit") or "unit").strip(),
@@ -483,6 +575,21 @@ def get_stock(db: Session, product_id: int, warehouse_id: int):
         db.add(stock)
         db.flush()
     return stock
+
+
+def notify_low_stock_if_needed(db: Session, stock: models.StockBalance):
+    if not stock.product or not stock.warehouse:
+        return
+    if stock.quantity > stock.product.min_stock:
+        return
+    create_notification(
+        db,
+        "stock",
+        "Stok Sedikit",
+        f"{stock.product.name} di {stock.warehouse.name} tersisa {stock.quantity}, minimum {stock.product.min_stock}.",
+        "warning" if stock.quantity > 0 else "critical",
+        "Admin",
+    )
 
 
 def calculate_inventory_value(db: Session, method: str = "FIFO"):
@@ -534,6 +641,9 @@ def stocks(db: Session = Depends(get_db), user: models.User = Depends(auth.get_c
 def create_transaction(payload: schemas.TransactionIn, db: Session = Depends(get_db), user: models.User = Depends(auth.require_roles("Admin", "Manajer Gudang", "Staf Gudang"))):
     tx_code = "IN" if payload.transaction_type in {"in", "IN"} else "OUT"
     tx_type = db.query(models.TransactionType).filter_by(code=tx_code).first()
+    supplier_id = payload.supplier_id if tx_code == "IN" else None
+    if supplier_id and not db.get(models.Supplier, supplier_id):
+        raise HTTPException(status_code=404, detail="Supplier tidak ditemukan")
     stock = get_stock(db, payload.product_id, payload.warehouse_id)
     if tx_code == "IN":
         stock.quantity += payload.quantity
@@ -542,13 +652,14 @@ def create_transaction(payload: schemas.TransactionIn, db: Session = Depends(get
         if stock.quantity < payload.quantity:
             raise HTTPException(status_code=400, detail="Stok tidak mencukupi")
         stock.quantity -= payload.quantity
-    tx = models.Transaction(type_id=tx_type.id, warehouse_id=payload.warehouse_id, user_id=user.id, notes=payload.notes, reference_no=f"TRX-{int(datetime.utcnow().timestamp())}")
+    notify_low_stock_if_needed(db, stock)
+    tx = models.Transaction(type_id=tx_type.id, warehouse_id=payload.warehouse_id, user_id=user.id, supplier_id=supplier_id, notes=payload.notes, reference_no=f"TRX-{int(datetime.utcnow().timestamp())}")
     db.add(tx)
     db.flush()
     db.add(models.TransactionDetail(transaction_id=tx.id, product_id=payload.product_id, quantity=payload.quantity, unit_price=payload.unit_price, subtotal=payload.quantity * payload.unit_price, notes=payload.notes))
     audit(db, user, "transaction", "transactions", str(tx.id))
     db.commit()
-    return {"id": tx.id, "transaction_type": tx_code.lower(), "product_id": payload.product_id, "warehouse_id": payload.warehouse_id, "quantity": payload.quantity, "notes": payload.notes, "created_at": tx.created_at}
+    return {"id": tx.id, "transaction_type": tx_code.lower(), "product_id": payload.product_id, "warehouse_id": payload.warehouse_id, "supplier_id": supplier_id, "supplier_name": tx.supplier.name if tx.supplier else "-", "quantity": payload.quantity, "notes": payload.notes, "created_at": tx.created_at}
 
 
 @app.get("/transactions")
@@ -560,6 +671,7 @@ def transactions(db: Session = Depends(get_db), user: models.User = Depends(auth
         result.append({
             "id": tx.id, "transaction_type": tx.type.code.lower(), "product_name": detail.product.name if detail else "-",
             "quantity": detail.quantity if detail else 0, "warehouse_name": tx.warehouse.name,
+            "supplier_id": tx.supplier_id, "supplier_name": tx.supplier.name if tx.supplier else "-",
             "created_at": tx.created_at, "notes": tx.notes
         })
     return result
@@ -574,18 +686,69 @@ async def create_transfer(payload: schemas.TransferIn, db: Session = Depends(get
     source = get_stock(db, payload.product_id, source_id)
     if source.quantity < payload.quantity:
         raise HTTPException(status_code=400, detail="Stok gudang asal tidak mencukupi")
-    destination = get_stock(db, payload.product_id, destination_id)
+    transfer = models.Transfer(
+        product_id=payload.product_id,
+        source_warehouse_id=source_id,
+        destination_warehouse_id=destination_id,
+        user_id=user.id,
+        quantity=payload.quantity,
+        notes=payload.notes,
+        status="pending",
+    )
+    db.add(transfer)
+    db.flush()
+    create_notification(
+        db,
+        "transfer",
+        "Approval Transfer",
+        f"Transfer {transfer.quantity} {transfer.product.unit} {transfer.product.name} dari {transfer.source_warehouse.name} ke {transfer.destination_warehouse.name} menunggu approval.",
+        "warning",
+        "Admin",
+    )
+    audit(db, user, "request_transfer", "transfers", str(transfer.id))
+    db.commit()
+    return {"id": transfer.id, "status": transfer.status, "message": "Transfer menunggu approval Admin/Manajer Gudang"}
+
+
+@app.post("/transfers/{transfer_id}/approve")
+async def approve_transfer(transfer_id: int, db: Session = Depends(get_db), user: models.User = Depends(auth.require_roles("Admin", "Manajer Gudang"))):
+    transfer = db.get(models.Transfer, transfer_id)
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer tidak ditemukan")
+    if transfer.status != "pending":
+        raise HTTPException(status_code=400, detail="Transfer sudah diproses")
+    source = get_stock(db, transfer.product_id, transfer.source_warehouse_id)
+    if source.quantity < transfer.quantity:
+        raise HTTPException(status_code=400, detail="Stok gudang asal tidak mencukupi")
+    destination = get_stock(db, transfer.product_id, transfer.destination_warehouse_id)
 
     async def decrease_source():
-        source.quantity -= payload.quantity
+        source.quantity -= transfer.quantity
 
     async def increase_destination():
-        destination.quantity += payload.quantity
+        destination.quantity += transfer.quantity
 
     await asyncio.gather(decrease_source(), increase_destination())
-    transfer = models.Transfer(product_id=payload.product_id, source_warehouse_id=source_id, destination_warehouse_id=destination_id, user_id=user.id, quantity=payload.quantity, notes=payload.notes)
-    db.add(transfer)
-    audit(db, user, "transfer", "transfers", str(payload.product_id))
+    transfer.status = "approved"
+    transfer.approved_by_id = user.id
+    transfer.approved_at = datetime.utcnow()
+    notify_low_stock_if_needed(db, source)
+    audit(db, user, "approve_transfer", "transfers", str(transfer.id))
+    db.commit()
+    return {"id": transfer.id, "status": transfer.status}
+
+
+@app.post("/transfers/{transfer_id}/reject")
+def reject_transfer(transfer_id: int, db: Session = Depends(get_db), user: models.User = Depends(auth.require_roles("Admin", "Manajer Gudang"))):
+    transfer = db.get(models.Transfer, transfer_id)
+    if not transfer:
+        raise HTTPException(status_code=404, detail="Transfer tidak ditemukan")
+    if transfer.status != "pending":
+        raise HTTPException(status_code=400, detail="Transfer sudah diproses")
+    transfer.status = "rejected"
+    transfer.approved_by_id = user.id
+    transfer.approved_at = datetime.utcnow()
+    audit(db, user, "reject_transfer", "transfers", str(transfer.id))
     db.commit()
     return {"id": transfer.id, "status": transfer.status}
 
@@ -595,7 +758,8 @@ def transfers(db: Session = Depends(get_db), user: models.User = Depends(auth.ge
     return [{
         "id": row.id, "product_name": row.product.name, "from_warehouse_name": row.source_warehouse.name,
         "to_warehouse_name": row.destination_warehouse.name, "quantity": row.quantity, "status": row.status,
-        "created_at": row.created_at
+        "created_at": row.created_at, "approved_at": row.approved_at,
+        "approved_by": row.approved_by.name if row.approved_by else None
     } for row in db.query(models.Transfer).order_by(models.Transfer.id.desc()).limit(100).all()]
 
 
@@ -616,7 +780,38 @@ def dashboard_summary(db: Session = Depends(get_db), user: models.User = Depends
         "movement_chart": movement or [{"label": "IN", "in": 120, "out": 0}, {"label": "OUT", "in": 0, "out": 45}],
         "low_stock_alerts": [{"product_name": row.product.name, "warehouse": row.warehouse.name, "quantity": row.quantity, "min_stock": row.product.min_stock} for row in low_stock[:8]],
         "latest": [{"id": f"TRX-{tx.id}", "product": tx.details[0].product.name if tx.details else "-", "movement": f"{tx.type.code} {tx.details[0].quantity if tx.details else 0}", "warehouse": tx.warehouse.name, "time": tx.created_at.strftime("%d %b, %H:%M")} for tx in db.query(models.Transaction).order_by(models.Transaction.id.desc()).limit(5).all()],
+        "pending_transfer_count": db.query(models.Transfer).filter(models.Transfer.status == "pending").count(),
+        "critical_error_count": db.query(models.ErrorLog).filter(models.ErrorLog.severity == "critical").count(),
+        "updated_at": datetime.utcnow().isoformat(),
     }
+
+
+@app.get("/notifications")
+def notifications(db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
+    query = db.query(models.Notification)
+    if user.role_name != "Admin":
+        query = query.filter(models.Notification.target_role.in_([user.role_name, "all"]))
+    rows = query.order_by(models.Notification.id.desc()).limit(50).all()
+    return [{
+        "id": row.id,
+        "type": row.type,
+        "title": row.title,
+        "message": row.message,
+        "severity": row.severity,
+        "is_read": row.is_read,
+        "created_at": row.created_at,
+    } for row in rows]
+
+
+@app.post("/notifications/read-all")
+def read_all_notifications(db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
+    query = db.query(models.Notification)
+    if user.role_name != "Admin":
+        query = query.filter(models.Notification.target_role.in_([user.role_name, "all"]))
+    for row in query.all():
+        row.is_read = True
+    db.commit()
+    return {"message": "Notifikasi ditandai dibaca"}
 
 
 @app.get("/dashboard/pdf")
@@ -921,6 +1116,133 @@ def stock_excel(user: models.User = Depends(auth.get_current_user)):
     return StreamingResponse(io.BytesIO(content.encode()), media_type="text/csv", headers={"Content-Disposition": "attachment; filename=laporan-stok.csv"})
 
 
+@app.get("/warehouses/stock/pdf")
+def warehouses_stock_pdf(db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
+    warehouses = db.query(models.Warehouse).order_by(models.Warehouse.city.asc()).all()
+    buffer = io.BytesIO()
+    pdf = canvas.Canvas(buffer, pagesize=A4)
+    width, height = A4
+    navy = colors.HexColor("#001736")
+    blue_soft = colors.HexColor("#f2f4f6")
+    warning = colors.HexColor("#b54708")
+    danger = colors.HexColor("#ba1a1a")
+    success = colors.HexColor("#079455")
+    slate = colors.HexColor("#43474f")
+
+    pdf.setTitle("Laporan Stok Per Gudang")
+
+    def draw_header():
+        pdf.setFillColor(navy)
+        pdf.roundRect(36, height - 92, width - 72, 56, 10, fill=1, stroke=0)
+        pdf.setFillColor(colors.white)
+        pdf.setFont("Helvetica-Bold", 18)
+        pdf.drawString(58, height - 60, "SmartStock Pro")
+        pdf.setFont("Helvetica", 9)
+        pdf.drawRightString(width - 58, height - 58, f"Dicetak: {datetime.now().strftime('%Y-%m-%d %H:%M')}")
+        pdf.drawRightString(width - 58, height - 74, "Laporan Stok Per Gudang")
+
+    def ensure_space(current_y, needed=40):
+        if current_y >= needed:
+            return current_y
+        pdf.showPage()
+        draw_header()
+        return height - 126
+
+    draw_header()
+    y = height - 126
+    total_all_stock = db.query(func.coalesce(func.sum(models.StockBalance.quantity), 0)).scalar() or 0
+    total_products = db.query(models.Product).count()
+    total_warehouses = len(warehouses)
+
+    cards = [
+        ("Total Gudang", total_warehouses, navy),
+        ("Total Produk", total_products, navy),
+        ("Total Stok", int(total_all_stock), navy),
+    ]
+    card_w = (width - 84) / 3
+    for index, (label, value, color) in enumerate(cards):
+        x = 36 + index * (card_w + 6)
+        pdf.setFillColor(blue_soft)
+        pdf.roundRect(x, y - 44, card_w, 44, 8, fill=1, stroke=0)
+        pdf.setFillColor(slate)
+        pdf.setFont("Helvetica", 8)
+        pdf.drawString(x + 10, y - 15, label)
+        pdf.setFillColor(color)
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(x + 10, y - 32, str(value))
+    y -= 74
+
+    for warehouse in warehouses:
+        stock_rows = (
+            db.query(models.StockBalance)
+            .filter(models.StockBalance.warehouse_id == warehouse.id, models.StockBalance.quantity > 0)
+            .order_by(models.StockBalance.quantity.desc())
+            .all()
+        )
+        y = ensure_space(y, 96)
+        warehouse_total = sum(row.quantity for row in stock_rows)
+        low_count = sum(1 for row in stock_rows if row.product and row.quantity <= row.product.min_stock)
+
+        pdf.setFillColor(navy)
+        pdf.setFont("Helvetica-Bold", 12)
+        pdf.drawString(36, y, f"{warehouse.name} ({warehouse.code})")
+        pdf.setFillColor(slate)
+        pdf.setFont("Helvetica", 8)
+        pdf.drawString(36, y - 14, f"{warehouse.city} - {warehouse.address or '-'}")
+        pdf.drawRightString(width - 36, y, f"Total Stok: {warehouse_total}")
+        pdf.drawRightString(width - 36, y - 14, f"Produk Sedikit: {low_count}")
+        y -= 34
+
+        pdf.setFillColor(navy)
+        pdf.roundRect(36, y - 16, width - 72, 20, 5, fill=1, stroke=0)
+        pdf.setFillColor(colors.white)
+        pdf.setFont("Helvetica-Bold", 8)
+        for label, x in [("SKU", 48), ("Produk", 120), ("Stok", 340), ("Min", 390), ("Status", 438), ("Harga", 500)]:
+            pdf.drawString(x, y - 10, label)
+        y -= 28
+
+        if not stock_rows:
+            pdf.setFillColor(slate)
+            pdf.setFont("Helvetica", 8)
+            pdf.drawString(48, y, "Belum ada stok produk di gudang ini.")
+            y -= 24
+            continue
+
+        for index, row in enumerate(stock_rows):
+            y = ensure_space(y, 50)
+            if index % 2 == 0:
+                pdf.setFillColor(blue_soft)
+                pdf.roundRect(36, y - 5, width - 72, 18, 4, fill=1, stroke=0)
+
+            product = row.product
+            status = "Habis" if row.quantity <= 0 else "Sedikit" if product and row.quantity <= product.min_stock else "Tersedia"
+            status_color = danger if status == "Habis" else warning if status == "Sedikit" else success
+
+            pdf.setFillColor(navy)
+            pdf.setFont("Helvetica", 8)
+            pdf.drawString(48, y, (product.sku if product else "-")[:11])
+            pdf.drawString(120, y, (product.name if product else "-")[:30])
+            pdf.drawString(340, y, str(row.quantity))
+            pdf.drawString(390, y, str(product.min_stock if product else "-"))
+            pdf.setFillColor(status_color)
+            pdf.setFont("Helvetica-Bold", 8)
+            pdf.drawString(438, y, status)
+            pdf.setFillColor(navy)
+            pdf.setFont("Helvetica", 8)
+            pdf.drawRightString(558, y, f"Rp {int(product.selling_price if product else 0):,}".replace(",", "."))
+            y -= 20
+        y -= 12
+
+    pdf.setFillColor(slate)
+    pdf.setFont("Helvetica", 7)
+    pdf.drawCentredString(width / 2, 24, "SmartStock Pro - Laporan Stok Per Gudang")
+    pdf.save()
+    buffer.seek(0)
+    audit(db, user, "export", "warehouses", "stock_pdf")
+    db.commit()
+    return StreamingResponse(buffer, media_type="application/pdf", headers={"Content-Disposition": "attachment; filename=stok-per-gudang.pdf"})
+
+
 @app.get("/transactions/pdf")
 def transactions_pdf(db: Session = Depends(get_db), user: models.User = Depends(auth.get_current_user)):
     rows = db.query(models.Transaction).order_by(models.Transaction.id.desc()).limit(200).all()
@@ -928,12 +1250,13 @@ def transactions_pdf(db: Session = Depends(get_db), user: models.User = Depends(
     db.commit()
     return log_pdf(
         "Laporan Transaksi Stok",
-        ["Ref", "Tipe", "Produk", "Gudang", "Jumlah", "Waktu"],
+        ["Ref", "Tipe", "Produk", "Gudang", "Supplier", "Jumlah", "Waktu"],
         [[
             row.reference_no or f"TRX-{row.id}",
             row.type.code if row.type else "-",
             row.details[0].product.name if row.details and row.details[0].product else "-",
             row.warehouse.name if row.warehouse else "-",
+            row.supplier.name if row.supplier else "-",
             row.details[0].quantity if row.details else 0,
             row.created_at.strftime("%Y-%m-%d %H:%M"),
         ] for row in rows],
@@ -1193,6 +1516,8 @@ def create_error_log(payload: schemas.ErrorLogIn, db: Session = Depends(get_db),
         raise HTTPException(status_code=400, detail="Severity tidak valid")
     log = models.ErrorLog(**payload.model_dump())
     db.add(log)
+    if payload.severity in {"critical", "warning"}:
+        create_notification(db, "error", "Notifikasi Error", payload.message, payload.severity, "Admin")
     audit(db, user, "create", "error_logs", payload.severity)
     db.commit()
     return log
@@ -1207,6 +1532,7 @@ def monitoring(db: Session = Depends(get_db), user: models.User = Depends(auth.g
     if response > 200:
         alerts.append("Response time melebihi threshold 200 ms")
         db.add(models.ErrorLog(severity="warning", message=alerts[0], module="monitoring", path="/monitoring/resources", method="GET"))
+        create_notification(db, "error", "Monitoring Warning", alerts[0], "warning", "Admin")
         db.commit()
     return {
         "cpu": random.randint(18, 82),

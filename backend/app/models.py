@@ -89,7 +89,7 @@ class Product(Base, TimestampMixin):
     unit: Mapped[str] = mapped_column(String(30), default="unit")
     purchase_price: Mapped[float] = mapped_column(Float, default=0)
     selling_price: Mapped[float] = mapped_column(Float, default=0)
-    min_stock: Mapped[int] = mapped_column(Integer, default=5)
+    min_stock: Mapped[int] = mapped_column(Integer, default=15)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
 
     category = relationship("Category")
@@ -129,6 +129,7 @@ class Transaction(Base):
     type_id: Mapped[int] = mapped_column(ForeignKey("transaction_types.id"))
     warehouse_id: Mapped[int] = mapped_column(ForeignKey("warehouses.id"))
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    supplier_id: Mapped[int | None] = mapped_column(ForeignKey("suppliers.id"), nullable=True)
     transaction_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     reference_no: Mapped[str | None] = mapped_column(String(80), nullable=True)
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
@@ -137,6 +138,7 @@ class Transaction(Base):
     type = relationship("TransactionType")
     warehouse = relationship("Warehouse")
     user = relationship("User")
+    supplier = relationship("Supplier")
     details = relationship("TransactionDetail", cascade="all, delete-orphan")
 
 
@@ -164,13 +166,16 @@ class Transfer(Base):
     user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
     transfer_date: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
     quantity: Mapped[int] = mapped_column(Integer)
-    status: Mapped[str] = mapped_column(String(30), default="completed")
+    status: Mapped[str] = mapped_column(String(30), default="pending")
     notes: Mapped[str | None] = mapped_column(Text, nullable=True)
+    approved_by_id: Mapped[int | None] = mapped_column(ForeignKey("users.id"), nullable=True)
+    approved_at: Mapped[datetime | None] = mapped_column(DateTime, nullable=True)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
     product = relationship("Product")
     source_warehouse = relationship("Warehouse", foreign_keys=[source_warehouse_id])
     destination_warehouse = relationship("Warehouse", foreign_keys=[destination_warehouse_id])
+    approved_by = relationship("User", foreign_keys=[approved_by_id])
 
 
 class AuditLog(Base):
@@ -198,6 +203,19 @@ class ErrorLog(Base):
     module: Mapped[str | None] = mapped_column(String(100), nullable=True)
     path: Mapped[str | None] = mapped_column(String(160), nullable=True)
     method: Mapped[str | None] = mapped_column(String(20), nullable=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
+
+
+class Notification(Base):
+    __tablename__ = "notifications"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    type: Mapped[str] = mapped_column(String(40), index=True)
+    title: Mapped[str] = mapped_column(String(120))
+    message: Mapped[str] = mapped_column(Text)
+    severity: Mapped[str] = mapped_column(String(20), default="info")
+    target_role: Mapped[str] = mapped_column(String(50), default="Admin")
+    is_read: Mapped[bool] = mapped_column(Boolean, default=False)
     created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.utcnow)
 
 

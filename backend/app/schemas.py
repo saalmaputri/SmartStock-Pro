@@ -84,8 +84,11 @@ class ProductIn(BaseModel):
     unit: str = "unit"
     purchase_price: float = 0
     selling_price: float = 0
-    min_stock: int = 5
+    min_stock: int = 15
     is_active: bool = True
+    warehouse_id: int | None = None
+    initial_quantity: int = 0
+    initial_stocks: dict[int, int] = Field(default_factory=dict)
 
 
 class ProductOut(ProductIn):
@@ -97,6 +100,7 @@ class ProductOut(ProductIn):
 class TransactionIn(BaseModel):
     product_id: int
     warehouse_id: int
+    supplier_id: int | None = None
     quantity: int = Field(gt=0)
     transaction_type: str = "in"
     notes: str | None = None
