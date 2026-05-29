@@ -18,21 +18,6 @@ SmartStock Pro adalah aplikasi web manajemen inventaris untuk produk, gudang, tr
 - JWT Authentication
 - bcrypt/passlib
 
----
-
-## Struktur Folder
-
-```text
-smartstock-pro/
-├── backend/
-├── frontend/
-├── docs/
-├── README.md
-└── .gitignore
-```
-
----
-
 # Kebutuhan Sistem
 
 Pastikan perangkat sudah memiliki:
@@ -110,34 +95,6 @@ npm run dev
 ```
 
 Frontend berjalan:
-
-```text
-http://127.0.0.1:5173
-```
-
----
-
-# Cara Menjalankan Project
-
-## Terminal 1 - Backend
-
-```powershell
-cd backend
-
-.\.venv\Scripts\Activate.ps1
-
-uvicorn app.main:app --reload
-```
-
-## Terminal 2 - Frontend
-
-```powershell
-cd frontend
-
-npm run dev
-```
-
-Kemudian buka:
 
 ```text
 http://127.0.0.1:5173
@@ -309,29 +266,190 @@ Lalu aktifkan ulang:
 ```
 
 ---
+## Dokumentasi API
 
-# Build Production
-
-Frontend:
-
-```powershell
-cd frontend
-
-npm run build
-```
-
-Preview:
-
-```powershell
-npm run preview
-```
-
-# Catatan
-
-Backend FastAPI harus berjalan sebelum frontend digunakan karena frontend mengambil data melalui REST API:
+Base URL:
 
 ```text
 http://127.0.0.1:8000
 ```
 
-Project ini merupakan MVP sistem inventaris untuk kebutuhan mini project BNSP Web Developer.
+Format request dan response menggunakan JSON, kecuali endpoint login yang memakai `application/x-www-form-urlencoded`.
+
+Endpoint yang membutuhkan login harus mengirim header:
+
+```http
+Authorization: Bearer <access_token>
+```
+
+### Auth
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| POST | `/auth/login` | Login dan mendapatkan JWT token |
+| GET | `/auth/me` | Mengambil profil user yang sedang login |
+
+Contoh login:
+
+```http
+POST /auth/login
+Content-Type: application/x-www-form-urlencoded
+
+username=admin@smartstock.com&password=admin123
+```
+
+Response:
+
+```json
+{
+  "access_token": "token_jwt",
+  "token_type": "bearer"
+}
+```
+
+### Dashboard
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/dashboard/summary` | Ringkasan dashboard, total stok, alert stok, grafik transaksi |
+| GET | `/dashboard/pdf` | Export dashboard ke PDF |
+
+### Produk
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/products` | Mengambil daftar produk beserta stok per gudang |
+| POST | `/products` | Menambah produk baru dan stok pembukaan per gudang |
+| PUT | `/products/{id}` | Mengubah data produk |
+| DELETE | `/products/{id}` | Menghapus produk |
+| POST | `/products/upload-image` | Upload gambar produk |
+| POST | `/products/import-csv` | Import produk dari CSV |
+| GET | `/products/pdf` | Export daftar produk ke PDF |
+
+Contoh payload tambah produk:
+
+```json
+{
+  "name": "Headphone Wireless",
+  "sku": "",
+  "category_id": 1,
+  "description": "Produk elektronik",
+  "unit": "Unit",
+  "purchase_price": 250000,
+  "selling_price": 350000,
+  "min_stock": 15,
+  "initial_stocks": {
+    "1": 20,
+    "2": 10,
+    "3": 0,
+    "4": 5,
+    "5": 8
+  }
+}
+```
+
+### Kategori
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/categories` | Mengambil daftar kategori |
+| POST | `/categories` | Menambah kategori |
+| PUT | `/categories/{id}` | Mengubah kategori |
+| DELETE | `/categories/{id}` | Menghapus kategori |
+
+### Supplier
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/suppliers` | Mengambil daftar supplier |
+| POST | `/suppliers` | Menambah supplier |
+| PUT | `/suppliers/{id}` | Mengubah supplier |
+| DELETE | `/suppliers/{id}` | Menghapus supplier |
+
+### Gudang
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/warehouses` | Mengambil daftar gudang |
+| POST | `/warehouses` | Menambah gudang |
+| PUT | `/warehouses/{id}` | Mengubah gudang |
+| DELETE | `/warehouses/{id}` | Menghapus gudang |
+| GET | `/warehouses/map` | Mengambil data lokasi gudang |
+| GET | `/warehouses/stock/pdf` | Export stok setiap gudang ke PDF |
+
+### Stok dan Transaksi
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/stocks` | Mengambil stok produk per gudang |
+| POST | `/transactions` | Membuat transaksi barang masuk/keluar |
+| GET | `/transactions` | Mengambil riwayat transaksi stok |
+| GET | `/transactions/pdf` | Export transaksi stok ke PDF |
+
+Contoh payload transaksi barang masuk:
+
+```json
+{
+  "product_id": 1,
+  "warehouse_id": 1,
+  "supplier_id": 1,
+  "quantity": 25,
+  "transaction_type": "in",
+  "notes": "Barang masuk dari supplier"
+}
+```
+
+Contoh payload transaksi barang keluar:
+
+```json
+{
+  "product_id": 1,
+  "warehouse_id": 1,
+  "quantity": 5,
+  "transaction_type": "out",
+  "notes": "Barang keluar"
+}
+```
+
+### Transfer Stok
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/transfers` | Mengambil riwayat transfer |
+| POST | `/transfers` | Mengajukan transfer stok antar gudang |
+| POST | `/transfers/{id}/approve` | Menyetujui transfer stok |
+| POST | `/transfers/{id}/reject` | Menolak transfer stok |
+| GET | `/transfers/pdf` | Export transfer stok ke PDF |
+
+Contoh payload transfer:
+
+```json
+{
+  "product_id": 1,
+  "warehouse_id": 1,
+  "target_warehouse_id": 2,
+  "quantity": 10,
+  "notes": "Transfer ke gudang tujuan"
+}
+```
+
+### Laporan
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/reports/stock/pdf` | Export laporan stok ke PDF |
+| GET | `/reports/stock/excel` | Export laporan stok ke CSV |
+| POST | `/reports/stock/pdf/jobs` | Membuat background job laporan PDF |
+| GET | `/jobs` | Mengambil daftar background job |
+| GET | `/jobs/{id}` | Mengambil detail background job |
+
+### Notifikasi dan Log
+
+| Method | Endpoint | Fungsi |
+| --- | --- | --- |
+| GET | `/notifications` | Mengambil notifikasi stok/transfer |
+| POST | `/notifications/read-all` | Menandai semua notifikasi sebagai dibaca |
+| GET | `/audit-logs` | Mengambil audit log |
+| GET | `/error-logs` | Mengambil error log |
+| POST | `/error-logs` | Membuat error log |
+| GET | `/monitoring/resources` | Mengambil status monitoring sederhana |
