@@ -2,8 +2,6 @@
 
 SmartStock Pro adalah aplikasi web manajemen inventaris untuk produk, gudang, transaksi stok, transfer antar gudang, laporan, dan notifikasi stok.
 
-Project ini dikembangkan sebagai mini project sertifikasi **BNSP Web Developer** dengan arsitektur fullstack modern menggunakan React dan FastAPI.
-
 ## Tech Stack
 
 ### Frontend
@@ -19,11 +17,6 @@ Project ini dikembangkan sebagai mini project sertifikasi **BNSP Web Developer**
 - SQLAlchemy ORM
 - JWT Authentication
 - bcrypt/passlib
-
-### Tools Pendukung
-- Git Version Control
-- ReportLab (Export PDF)
-- Python CSV (Import Data)
 
 ---
 
@@ -48,16 +41,6 @@ Pastikan perangkat sudah memiliki:
 - Node.js 18+
 - NPM
 - Git
-
-Cek versi:
-
-```powershell
-python --version
-node --version
-npm --version
-git --version
-```
-
 ---
 
 # Instalasi Backend
@@ -284,55 +267,6 @@ DB Browser for SQLite
 
 ---
 
-# Dokumentasi
-
-Folder:
-
-```text
-docs/
-```
-
-Berisi:
-
-- Architecture Documentation
-- Tools Analysis
-- Scalability Analysis
-- Migration Plan
-- Cutover Plan
-- Rollback Plan
-- User Guide
-- API Documentation
-- Troubleshooting Guide
-- FAQ
-
----
-
-# API Documentation
-
-FastAPI menyediakan dokumentasi otomatis:
-
-```text
-http://127.0.0.1:8000/docs
-```
-
-Endpoint utama:
-
-```text
-/auth/login
-/products
-/categories
-/warehouses
-/suppliers
-/transactions
-/transfers
-/reports
-/audit-logs
-/error-logs
-/monitoring
-```
-
----
-
 # Troubleshooting
 
 ## Frontend dependency error
@@ -391,24 +325,6 @@ Preview:
 ```powershell
 npm run preview
 ```
-
----
-
-# Version Control
-
-Project menggunakan Git.
-
-Contoh workflow:
-
-```bash
-git add .
-
-git commit -m "update feature"
-
-git push origin main
-```
-
----
 
 # Catatan
 
