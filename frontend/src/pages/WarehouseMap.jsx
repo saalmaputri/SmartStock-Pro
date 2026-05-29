@@ -2,32 +2,24 @@ import { useEffect, useState } from 'react'
 import api from '../api/axios'
 import PageHeader from '../components/PageHeader'
 
-const fallback = [
-  { id: 1, name: 'Gudang Jakarta', code: 'JKT', city: 'Jakarta', address: 'Jl. Industri No. 1', latitude: -6.2, longitude: 106.8 },
-  { id: 2, name: 'Gudang Surabaya', code: 'SBY', city: 'Surabaya', address: 'Jl. Logistik No. 2', latitude: -7.25, longitude: 112.75 },
-  { id: 3, name: 'Gudang Bandung', code: 'BDG', city: 'Bandung', address: 'Jl. Gudang No. 3', latitude: -6.91, longitude: 107.61 },
-  { id: 4, name: 'Gudang Medan', code: 'MDN', city: 'Medan', address: 'Jl. Sumatra No. 4', latitude: 3.59, longitude: 98.67 },
-  { id: 5, name: 'Gudang Makassar', code: 'MKS', city: 'Makassar', address: 'Jl. Pelabuhan No. 5', latitude: -5.14, longitude: 119.41 }
-]
-
 export default function WarehouseMap() {
-  const [warehouses, setWarehouses] = useState(fallback)
-  const [selected, setSelected] = useState(fallback[0])
+  const [warehouses, setWarehouses] = useState([])
+  const [selected, setSelected] = useState(null)
 
   useEffect(() => {
     api.get('/warehouses/map')
       .then(({ data }) => {
-        const rows = data?.length ? data : fallback
+        const rows = data?.length ? data : []
         setWarehouses(rows)
-        setSelected(rows[0])
+        setSelected(rows[0] || null)
       })
       .catch(() => {
-        setWarehouses(fallback)
-        setSelected(fallback[0])
+        setWarehouses([])
+        setSelected(null)
       })
   }, [])
 
-  const mapsQuery = encodeURIComponent(`${selected.latitude},${selected.longitude}`)
+  const mapsQuery = encodeURIComponent(`${selected?.latitude || 0},${selected?.longitude || 0}`)
   const mapsUrl = `https://www.google.com/maps?q=${mapsQuery}`
   const embedUrl = `https://www.google.com/maps?q=${mapsQuery}&z=12&output=embed`
 
@@ -36,8 +28,10 @@ export default function WarehouseMap() {
       <PageHeader
         title="Peta Gudang"
         description="Lokasi gudang ditampilkan dengan Google Maps embed dan dapat dibuka langsung di Google Maps."
-        action={<a className="btn-primary" href={mapsUrl} target="_blank" rel="noreferrer">Buka Google Maps</a>}
+        action={selected ? <a className="btn-primary" href={mapsUrl} target="_blank" rel="noreferrer">Buka Google Maps</a> : null}
       />
+      {!selected && <div className="card-static p-8 text-center text-slate">Data peta gudang belum tersedia dari backend.</div>}
+      {selected && (
       <section className="grid gap-6 xl:grid-cols-[1fr_360px]">
         <div className="card-static overflow-hidden">
           <iframe
@@ -64,6 +58,7 @@ export default function WarehouseMap() {
           ))}
         </div>
       </section>
+      )}
     </div>
   )
 }

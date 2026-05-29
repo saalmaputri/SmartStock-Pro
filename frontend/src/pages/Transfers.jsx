@@ -1,10 +1,11 @@
 import { useEffect, useState } from 'react'
-import { Download } from 'lucide-react'
+import { Check, Download, X } from 'lucide-react'
 import api from '../api/axios'
 import DataTable from '../components/DataTable'
 import { confirmAction } from '../utils/confirm'
 import { downloadBlob } from '../utils/download'
 import { errorMessage, formatDate } from '../utils/format'
+import { getUser } from '../utils/auth'
 
 export default function Transfers() {
   const [rows, setRows] = useState([])
@@ -13,23 +14,26 @@ export default function Transfers() {
   const [form, setForm] = useState({ product_id: '', warehouse_id: '', target_warehouse_id: '', quantity: 1, notes: '' })
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState('')
+  const user = getUser()
+  const canApprove = ['Admin', 'Manajer Gudang'].includes(user.role)
 
   async function load() {
     setLoading(true)
     setError('')
     try {
       const [transferRes, productRes, warehouseRes] = await Promise.all([
-        api.get('/transfers').catch(() => api.get('/transactions')),
+        api.get('/transfers'),
         api.get('/products'),
         api.get('/warehouses')
       ])
-      setRows(transferRes.data.filter ? transferRes.data.filter((item) => item.transaction_type === 'transfer' || item.from_warehouse_name) : [])
-      setProducts(productRes.data)
-      setWarehouses(warehouseRes.data)
-    } catch {
-      setRows([{ id: 1, product_name: 'Papan Sirkuit v4.2', from_warehouse_name: 'Gudang A1', to_warehouse_name: 'Gudang B4', quantity: 18, created_at: new Date().toISOString() }])
-      setProducts([{ id: 1, name: 'Papan Sirkuit v4.2' }])
-      setWarehouses([{ id: 1, name: 'Gudang A1' }, { id: 2, name: 'Gudang B4' }])
+      setRows(Array.isArray(transferRes.data) ? transferRes.data : [])
+      setProducts(Array.isArray(productRes.data) ? productRes.data : productRes.data.items || [])
+      setWarehouses(Array.isArray(warehouseRes.data) ? warehouseRes.data : warehouseRes.data.items || [])
+    } catch (err) {
+      setRows([])
+      setProducts([])
+      setWarehouses([])
+      setError(errorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -41,17 +45,13 @@ export default function Transfers() {
 
   async function submit(event) {
     event.preventDefault()
-    if (!await confirmAction('Proses transfer stok antar gudang ini? Stok gudang asal dan tujuan akan diperbarui.', { confirmText: 'Proses Transfer' })) return
+    if (!await confirmAction('Ajukan transfer stok antar gudang ini? Stok akan diperbarui setelah disetujui Admin atau Manajer Gudang.', { confirmText: 'Ajukan Transfer' })) return
     const payload = { ...form, product_id: Number(form.product_id), warehouse_id: Number(form.warehouse_id), target_warehouse_id: Number(form.target_warehouse_id), quantity: Number(form.quantity), transaction_type: 'transfer' }
     try {
       await api.post('/transfers', payload)
-    } catch {
-      try {
-        await api.post('/transactions', payload)
-      } catch (err) {
-        setError(errorMessage(err))
-        return
-      }
+    } catch (err) {
+      setError(errorMessage(err))
+      return
     }
     setForm({ ...form, quantity: 1, notes: '' })
     await load()
@@ -61,6 +61,33 @@ export default function Transfers() {
     if (!await confirmAction('Export transfer stok ke PDF?', { confirmText: 'Export PDF' })) return
     const response = await api.get('/transfers/pdf', { responseType: 'blob' })
     downloadBlob(response.data, 'transfer-stok.pdf')
+  }
+
+  async function processTransfer(row, action) {
+    const label = action === 'approve' ? 'Setujui' : 'Tolak'
+    if (!await confirmAction(`${label} transfer stok ini?`, { confirmText: label, danger: action === 'reject' })) return
+    try {
+      await api.post(`/transfers/${row.id}/${action}`)
+      await load()
+    } catch (err) {
+      setError(errorMessage(err))
+    }
+  }
+
+  function statusBadge(status) {
+    const styles = {
+      pending: 'bg-orange-50 text-warning',
+      approved: 'bg-green-50 text-success',
+      completed: 'bg-green-50 text-success',
+      rejected: 'bg-red-50 text-danger'
+    }
+    const labels = {
+      pending: 'Menunggu Approval',
+      approved: 'Disetujui',
+      completed: 'Selesai',
+      rejected: 'Ditolak'
+    }
+    return <span className={`rounded-full px-3 py-1 text-xs font-bold ${styles[status] || 'bg-blue-soft text-navy'}`}>{labels[status] || status}</span>
   }
 
   return (
@@ -73,7 +100,7 @@ export default function Transfers() {
         <label className="grid gap-2"><span className="label">Gudang Asal</span><select className="field" required value={form.warehouse_id} onChange={(e) => setForm({ ...form, warehouse_id: e.target.value })}><option value="">Pilih</option>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="grid gap-2"><span className="label">Gudang Tujuan</span><select className="field" required value={form.target_warehouse_id} onChange={(e) => setForm({ ...form, target_warehouse_id: e.target.value })}><option value="">Pilih</option>{warehouses.map((item) => <option key={item.id} value={item.id}>{item.name}</option>)}</select></label>
         <label className="grid gap-2"><span className="label">Jumlah</span><input className="field" type="number" min="1" value={form.quantity} onChange={(e) => setForm({ ...form, quantity: e.target.value })} /></label>
-        <div className="flex items-end"><button className="btn-primary w-full">Transfer</button></div>
+        <div className="flex items-end"><button className="btn-primary w-full">Ajukan</button></div>
         {error && <p className="text-sm font-semibold text-danger md:col-span-5">{error}</p>}
       </form>
       <DataTable
@@ -85,7 +112,18 @@ export default function Transfers() {
           { key: 'from_warehouse_name', label: 'Gudang Asal', render: (row) => row.from_warehouse_name || row.warehouse?.name || '-' },
           { key: 'to_warehouse_name', label: 'Gudang Tujuan', render: (row) => row.to_warehouse_name || row.target_warehouse?.name || '-' },
           { key: 'quantity', label: 'Jumlah' },
-          { key: 'created_at', label: 'Waktu', render: (row) => formatDate(row.created_at) }
+          { key: 'status', label: 'Status', render: (row) => statusBadge(row.status || 'pending') },
+          { key: 'created_at', label: 'Waktu', render: (row) => formatDate(row.created_at) },
+          {
+            key: 'actions',
+            label: 'Approval',
+            render: (row) => canApprove && row.status === 'pending' ? (
+              <div className="flex gap-2">
+                <button type="button" className="icon-button bg-green-50 text-success" onClick={() => processTransfer(row, 'approve')} aria-label="Setujui transfer"><Check size={17} /></button>
+                <button type="button" className="icon-button bg-red-50 text-danger" onClick={() => processTransfer(row, 'reject')} aria-label="Tolak transfer"><X size={17} /></button>
+              </div>
+            ) : <span className="text-sm text-slate">-</span>
+          }
         ]}
       />
     </div>

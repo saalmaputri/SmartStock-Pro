@@ -9,13 +9,11 @@ import Login from '../pages/Login'
 import Monitoring from '../pages/Monitoring'
 import Products from '../pages/Products'
 import Reports from '../pages/Reports'
-import Settings from '../pages/Settings'
 import Suppliers from '../pages/Suppliers'
 import Transactions from '../pages/Transactions'
 import Transfers from '../pages/Transfers'
 import Warehouses from '../pages/Warehouses'
 import WarehouseMap from '../pages/WarehouseMap'
-import ChangeLog from '../pages/ChangeLog'
 
 export default function AppRoutes() {
   return (
@@ -27,8 +25,6 @@ export default function AppRoutes() {
           <Route element={<ProtectedRoute roles={['Admin', 'Manajer Gudang', 'Staf Gudang', 'Viewer']} />}>
             <Route path="products" element={<Products />} />
             <Route path="warehouse-map" element={<WarehouseMap />} />
-            <Route path="change-log" element={<ChangeLog />} />
-            <Route path="settings" element={<Settings />} />
           </Route>
           <Route element={<ProtectedRoute roles={['Admin', 'Manajer Gudang', 'Staf Gudang']} />}>
             <Route path="transactions" element={<Transactions />} />

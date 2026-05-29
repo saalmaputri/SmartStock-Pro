@@ -9,10 +9,7 @@ export default function AuditLogs() {
   useEffect(() => {
     api.get('/audit-logs')
       .then(({ data }) => setRows(data))
-      .catch(() => setRows([
-        { id: 1, user: 'Admin SmartStock', action: 'create', module: 'products', record_id: '1', ip_address: '127.0.0.1', created_at: new Date().toISOString() },
-        { id: 2, user: 'Manajer Gudang', action: 'stock_in', module: 'transactions', record_id: '2', ip_address: '127.0.0.1', created_at: new Date().toISOString() }
-      ]))
+      .catch(() => setRows([]))
   }, [])
 
   return (

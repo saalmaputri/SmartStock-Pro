@@ -18,10 +18,7 @@ export default function Reports() {
   useEffect(() => {
     api.get('/stocks')
       .then(({ data }) => setStocks(data))
-      .catch(() => setStocks([
-        { id: 1, sku: 'SW-001', product_name: 'Smart Watch Elite S2', warehouse_name: 'Gudang A1', quantity: 452, min_stock: 20 },
-        { id: 2, sku: 'HP-042', product_name: 'Studio Pro Headphones', warehouse_name: 'Gudang B4', quantity: 12, min_stock: 15 }
-      ]))
+      .catch(() => setStocks([]))
     loadJobs()
   }, [])
 
@@ -31,16 +28,8 @@ export default function Reports() {
 
   async function exportPdf() {
     if (!await confirmAction('Export laporan stok ke PDF sekarang?', { confirmText: 'Export PDF' })) return
-    const paths = ['/reports/stock/pdf', '/reports/stock.pdf']
-    for (const path of paths) {
-      try {
-        const response = await api.get(path, { responseType: 'blob' })
-        downloadBlob(response.data, 'laporan-stok.pdf')
-        return
-      } catch {
-        // Try fallback endpoint.
-      }
-    }
+    const response = await api.get('/reports/stock/pdf', { responseType: 'blob' })
+    downloadBlob(response.data, 'laporan-stok.pdf')
   }
 
   async function exportExcel() {
@@ -78,7 +67,7 @@ export default function Reports() {
         <div>
           <h2 className="section-title">Ringkasan Laporan Stok</h2>
           <p className="mt-1 text-sm text-slate">Gunakan tombol export untuk menghasilkan PDF laporan stok. Import CSV memakai format sederhana untuk demo BNSP.</p>
-          <pre className="mt-5 overflow-x-auto rounded-2xl bg-blue-soft p-4 text-sm text-navy">sku,name,category_name,supplier_name,min_stock,price{'\n'}SKU-001,Kabel LAN,Elektronik,PT Demo,10,25000</pre>
+          <pre className="mt-5 overflow-x-auto rounded-2xl bg-blue-soft p-4 text-sm text-navy">sku,name,category_name,supplier_name,min_stock,price{'\n'}SKU-001,Kabel LAN,Elektronik,PT Demo,15,25000</pre>
         </div>
         <div className="grid content-start gap-3">
           <button className="btn-primary" onClick={exportPdf}><Download size={18} /> Export PDF</button>

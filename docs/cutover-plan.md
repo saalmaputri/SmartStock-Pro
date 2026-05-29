@@ -6,4 +6,4 @@
 4. Jalankan backend, pastikan `/docs` terbuka.
 5. Jalankan frontend, pastikan halaman login terbuka.
 6. Login Admin dan lakukan smoke test dashboard, CRUD, dan transaksi stok.
-7. Siapkan CSV contoh dan gambar produk kecil untuk presentasi.
+

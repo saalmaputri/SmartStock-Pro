@@ -18,11 +18,7 @@ export default function ErrorLogs() {
   useEffect(() => {
     api.get('/error-logs')
       .then(({ data }) => setRows(data))
-      .catch(() => setRows([
-        { id: 1, severity: 'critical', message: 'Stok asal tidak mencukupi', module: 'inventory', path: '/transfers', method: 'POST', created_at: new Date().toISOString() },
-        { id: 2, severity: 'warning', message: 'Upload gambar terlalu besar', module: 'products', path: '/products/upload-image', method: 'POST', created_at: new Date().toISOString() },
-        { id: 3, severity: 'info', message: 'Export PDF selesai', module: 'reports', path: '/reports/stock/pdf', method: 'GET', created_at: new Date().toISOString() }
-      ]))
+      .catch(() => setRows([]))
   }, [])
 
   return (

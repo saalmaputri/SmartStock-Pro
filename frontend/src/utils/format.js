@@ -16,6 +16,6 @@ export function errorMessage(error, fallback = 'Terjadi kesalahan') {
 
 export function stockStatus(quantity = 0, minStock = 5) {
   if (quantity <= 0) return { label: 'Stok Habis', className: 'bg-red-50 text-danger border-red-200' }
-  if (quantity <= minStock) return { label: 'Stok Rendah', className: 'bg-orange-50 text-warning border-orange-200' }
+  if (quantity <= minStock) return { label: 'Sedikit', className: 'bg-orange-50 text-warning border-orange-200' }
   return { label: 'Tersedia', className: 'bg-green-50 text-success border-green-200' }
 }

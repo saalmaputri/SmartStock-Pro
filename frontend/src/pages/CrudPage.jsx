@@ -31,8 +31,8 @@ function Modal({ title, fields, form, setForm, onClose, onSubmit, saving }) {
   )
 }
 
-export default function CrudPage({ title, endpoint, fields, columns, dummyRows = [] }) {
-  const [rows, setRows] = useState(dummyRows)
+export default function CrudPage({ title, endpoint, fields, columns }) {
+  const [rows, setRows] = useState([])
   const [query, setQuery] = useState('')
   const [modal, setModal] = useState(false)
   const [editing, setEditing] = useState(null)
@@ -48,10 +48,10 @@ export default function CrudPage({ title, endpoint, fields, columns, dummyRows =
     setError('')
     try {
       const { data } = await api.get(endpoint)
-      setRows(Array.isArray(data) ? data : dummyRows)
+      setRows(Array.isArray(data) ? data : data.items || [])
     } catch (err) {
-      setRows(dummyRows)
-      setError(dummyRows.length ? '' : errorMessage(err))
+      setRows([])
+      setError(errorMessage(err))
     } finally {
       setLoading(false)
     }
@@ -85,8 +85,7 @@ export default function CrudPage({ title, endpoint, fields, columns, dummyRows =
       setModal(false)
       await load()
     } catch (err) {
-      setRows((current) => editing ? current.map((item) => item.id === editing.id ? { ...item, ...form } : item) : [{ id: Date.now(), ...form }, ...current])
-      setModal(false)
+      setError(errorMessage(err))
     } finally {
       setSaving(false)
     }
@@ -97,8 +96,8 @@ export default function CrudPage({ title, endpoint, fields, columns, dummyRows =
     try {
       await api.delete(`${endpoint}/${row.id}`)
       await load()
-    } catch {
-      setRows((current) => current.filter((item) => item.id !== row.id))
+    } catch (err) {
+      setError(errorMessage(err))
     }
   }
 

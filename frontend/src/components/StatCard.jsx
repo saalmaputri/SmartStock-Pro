@@ -17,7 +17,7 @@ export default function StatCard({ title, value, icon: Icon, tone = 'blue', badg
         {badge && <span className="rounded-full bg-blue-soft px-3 py-1 text-xs font-bold text-navy">{badge}</span>}
       </div>
       <p className="text-[11px] font-bold uppercase tracking-wide text-slate">{title}</p>
-      <p className="mt-1 text-2xl font-extrabold tabular-nums tracking-tight text-navy">{value}</p>
+      <p className="mt-1 text-xl font-extrabold tabular-nums tracking-tight text-navy">{value}</p>
     </Component>
   )
 }

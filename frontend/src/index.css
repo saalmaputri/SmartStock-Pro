@@ -50,11 +50,11 @@ textarea {
   }
 
   .card {
-    @apply rounded-[2rem] border-0 bg-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal;
+    @apply rounded-xl border-0 bg-white shadow-card transition-all duration-200 hover:-translate-y-0.5 hover:shadow-modal;
   }
 
   .card-static {
-    @apply rounded-[2rem] border-0 bg-white shadow-card;
+    @apply rounded-xl border-0 bg-white shadow-card;
   }
 
   .btn-primary {

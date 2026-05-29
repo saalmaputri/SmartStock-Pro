@@ -11,15 +11,15 @@ export function confirmAction(message = 'Apakah Anda yakin ingin melanjutkan aks
     card.className = 'w-full max-w-md rounded-[2rem] border border-line bg-white p-6 shadow-modal'
 
     const title = document.createElement('h2')
-    title.className = 'text-xl font-extrabold text-navy'
-    title.textContent = options.title || 'Konfirmasi Aksi'
+    title.className = 'text-center text-xl font-extrabold text-navy'
+    title.textContent = options.title || confirmationTitle(options.confirmText, message)
 
     const text = document.createElement('p')
-    text.className = 'mt-3 text-sm leading-6 text-slate'
+    text.className = 'mt-3 text-center text-sm leading-6 text-slate'
     text.textContent = message
 
     const footer = document.createElement('div')
-    footer.className = 'mt-7 flex justify-end gap-3'
+    footer.className = 'mt-7 flex justify-center gap-3'
 
     const cancelButton = document.createElement('button')
     cancelButton.type = 'button'
@@ -54,4 +54,21 @@ export function confirmAction(message = 'Apakah Anda yakin ingin melanjutkan aks
     document.body.append(overlay)
     confirmButton.focus()
   })
+}
+
+function confirmationTitle(confirmText, message) {
+  const actionText = (confirmText || '').trim()
+  if (actionText) return `Konfirmasi ${actionText}`
+
+  const normalized = (message || '').toLowerCase()
+  if (normalized.includes('hapus')) return 'Konfirmasi Hapus'
+  if (normalized.includes('upload')) return 'Konfirmasi Upload'
+  if (normalized.includes('import')) return 'Konfirmasi Import'
+  if (normalized.includes('export')) return 'Konfirmasi Export'
+  if (normalized.includes('simpan')) return 'Konfirmasi Simpan'
+  if (normalized.includes('tambah')) return 'Konfirmasi Tambah'
+  if (normalized.includes('transfer')) return 'Konfirmasi Transfer'
+  if (normalized.includes('keluar') || normalized.includes('logout')) return 'Konfirmasi Logout'
+
+  return 'Konfirmasi Lanjutkan'
 }

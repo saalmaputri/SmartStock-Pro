@@ -33,7 +33,6 @@ export default function Monitoring() {
       </section>
       <section className="card p-6">
         <h2 className="section-title">Pemantauan Sumber Daya</h2>
-        <p className="mt-1 text-sm text-slate">Data monitoring sederhana untuk kebutuhan demo asesor. Nilai dapat berasal dari backend atau fallback dummy.</p>
         {Number(data.response_time_ms || 0) > 200 && <div className="mt-4 rounded-xl bg-orange-50 px-4 py-3 text-sm font-semibold text-warning">Response time melebihi threshold 200 ms.</div>}
         <div className="mt-6 grid gap-4">
           {metrics.slice(0, 3).map((item) => (

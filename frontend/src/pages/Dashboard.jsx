@@ -10,40 +10,42 @@ import { confirmAction } from '../utils/confirm'
 import { downloadBlob } from '../utils/download'
 import { formatNumber } from '../utils/format'
 
-const dummy = {
-  total_products: 1240,
-  total_stock: 45000,
-  low_stock_count: 12,
-  total_warehouses: 4,
-  inventory_value: 125000000,
-  movement_chart: [
-    { label: 'Sen', in: 240, out: 90 },
-    { label: 'Sel', in: 180, out: 120 },
-    { label: 'Rab', in: 310, out: 150 },
-    { label: 'Kam', in: 280, out: 170 },
-    { label: 'Jum', in: 420, out: 210 }
-  ],
+const emptySummary = {
+  total_products: 0,
+  total_stock: 0,
+  low_stock_count: 0,
+  total_warehouses: 0,
+  inventory_value: 0,
+  movement_chart: [],
   low_stock_alerts: [],
-  latest: [
-    { id: 'TRX-88219', product: 'Kit Katup Hidrolik', movement: '+240', warehouse: 'Gudang A1', time: '12 Okt, 14:22' },
-    { id: 'TRX-88218', product: 'Kabel Tembaga', movement: '-50', warehouse: 'Gudang C2', time: '12 Okt, 11:05' }
-  ]
+  latest: []
 }
 
 export default function Dashboard() {
   const navigate = useNavigate()
-  const [summary, setSummary] = useState(dummy)
+  const [summary, setSummary] = useState(emptySummary)
 
   useEffect(() => {
     function productAlerts(products = []) {
       return products
-        .filter((item) => Number(item.quantity || 0) <= Number(item.min_stock || 0))
+        .flatMap((item) => {
+          const stocks = Array.isArray(item.warehouse_stocks) && item.warehouse_stocks.length
+            ? item.warehouse_stocks
+            : [{ warehouse_name: item.warehouse_name || item.category_name || 'Manajemen Produk', quantity: item.quantity, min_stock: item.min_stock, status: Number(item.quantity || 0) <= Number(item.min_stock || 0) ? 'low' : 'safe' }]
+          return stocks.map((stock) => ({
+            id: item.id,
+            product_name: item.name,
+            warehouse: stock.warehouse_name || stock.warehouse || 'Gudang',
+            warehouse_id: stock.warehouse_id,
+            quantity: Number(stock.quantity || 0),
+            min_stock: Number(item.min_stock || stock.min_stock || 0),
+            status: stock.status || (Number(stock.quantity || 0) <= Number(item.min_stock || 0) ? 'low' : 'safe')
+          }))
+        })
+        .filter((item) => item.quantity > 0 && item.quantity <= item.min_stock)
         .map((item) => ({
-          id: item.id,
-          product_name: item.name,
-          warehouse: item.warehouse_name || item.category_name || 'Manajemen Produk',
-          quantity: Number(item.quantity || 0),
-          min_stock: Number(item.min_stock || 0)
+          ...item,
+          status: 'low'
         }))
         .slice(0, 8)
     }
@@ -55,13 +57,13 @@ export default function Dashboard() {
           const products = results[1].status === 'fulfilled' && Array.isArray(results[1].value.data) ? results[1].value.data : []
           const alerts = productAlerts(products)
           setSummary({
-            ...dummy,
+            ...emptySummary,
             ...dashboardData,
             low_stock_count: alerts.length || dashboardData.low_stock_count || 0,
             low_stock_alerts: alerts.length ? alerts : (dashboardData.low_stock_alerts || [])
           })
         })
-        .catch(() => setSummary(dummy))
+        .catch(() => setSummary(emptySummary))
     }
     load()
     const timer = setInterval(load, 5000)
@@ -86,13 +88,14 @@ export default function Dashboard() {
         <div>
           <h2 className="page-title">Dashboard</h2>
           <p className="page-subtitle">Berikut adalah ringkasan inventaris Anda hari ini.</p>
+          {summary.updated_at && <p className="mt-2 text-xs font-semibold text-slate">Auto-refresh setiap 5 detik. Terakhir update: {new Date(summary.updated_at).toLocaleTimeString('id-ID')}</p>}
         </div>
         <button className="btn-primary" onClick={exportDashboardPdf}><Download size={18} /> Export PDF</button>
       </div>
       <section className="grid gap-6 md:grid-cols-2 xl:grid-cols-5">
         <StatCard title="Total Produk" value={formatNumber(summary.total_products)} icon={Package} badge="+2.4%" />
         <StatCard title="Total Stok" value={formatNumber(summary.total_stock)} icon={Boxes} badge="Aktif" />
-        <StatCard title="Stok Menipis" value={formatNumber(summary.low_stock_count)} icon={AlertTriangle} tone="red" badge="Kelola" onClick={() => navigate('/products')} />
+        <StatCard title="Stok Menipis" value={formatNumber(summary.low_stock_count)} icon={AlertTriangle} tone="red" badge="Per Gudang" onClick={() => navigate('/products?status=low')} />
         <StatCard title="Total Gudang" value={formatNumber(summary.total_warehouses)} icon={Warehouse} badge={`${summary.total_warehouses} Lokasi`} />
         <StatCard title="Nilai Inventaris" value={`Rp${formatNumber(summary.inventory_value)}`} icon={Boxes} tone="green" />
       </section>
@@ -118,7 +121,7 @@ export default function Dashboard() {
             </ResponsiveContainer>
           </div>
         </div>
-        <StockAlert items={summary.low_stock_alerts} onSelect={() => navigate('/products')} />
+        <StockAlert items={summary.low_stock_alerts} onSelect={(item) => navigate(`/products?highlight=${encodeURIComponent(item.product_name)}&status=low${item.warehouse_id ? `&warehouse=${item.warehouse_id}` : ''}`)} />
       </section>
       <section>
         <h2 className="mb-4 section-title">Aktivitas Terbaru</h2>

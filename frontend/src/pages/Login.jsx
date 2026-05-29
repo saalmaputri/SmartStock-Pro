@@ -60,22 +60,27 @@ export default function Login() {
 
   return (
     <main className="grid min-h-screen bg-background lg:grid-cols-[1.1fr_0.9fr]">
-      <section className="flex items-center px-6 py-12 md:px-14">
-        <div className="max-w-2xl">
-          <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-blue-active text-navy">
+      <section className="relative flex min-h-[42vh] items-center overflow-hidden px-6 py-12 md:px-14 lg:min-h-screen">
+        <img
+          src="https://images.unsplash.com/photo-1586528116311-ad8dd3c8310d?auto=format&fit=crop&w=1600&q=85"
+          alt="Gudang inventaris SmartStock Pro"
+          className="absolute inset-0 h-full w-full object-cover"
+        />
+        <div className="absolute inset-0 bg-navy/70" />
+        <div className="absolute inset-0 bg-gradient-to-r from-navy/95 via-navy/70 to-navy/35" />
+        <div className="relative z-10 w-full max-w-2xl text-white">
+          <div className="mb-8 flex h-16 w-16 items-center justify-center rounded-2xl bg-white/15 text-white backdrop-blur">
             <Boxes size={34} />
           </div>
-          <p className="mb-3 text-[11px] font-bold uppercase tracking-wide text-slate">Mini Project BNSP Web Developer</p>
-          <h1 className="text-4xl font-extrabold text-navy md:text-5xl">SmartStock Pro</h1>
-          <p className="mt-5 max-w-xl text-base leading-7 text-slate">
-            Sistem manajemen inventaris berbasis web untuk dashboard stok, transaksi, transfer gudang, laporan, audit log, dan monitoring operasional.
+          <h1 className="text-4xl font-extrabold text-white md:text-5xl">SmartStock Pro</h1>
+          <p className="mt-5 max-w-xl text-base leading-7 text-white/85">
+            Sistem manajemen inventaris berbasis web untuk stok produk, transaksi barang, transfer gudang, dan laporan inventaris.
           </p>
         </div>
       </section>
       <section className="flex items-center justify-center border-l border-line bg-white px-6 py-12">
         <form onSubmit={submit} className="w-full max-w-md rounded-2xl border border-line bg-background p-8 shadow-modal">
-          <h2 className="text-2xl font-extrabold text-navy">Masuk</h2>
-          <p className="mt-1 text-sm text-slate">Gunakan akun demo untuk presentasi asesor.</p>
+          <h2 className="text-center text-2xl font-extrabold text-navy">Login</h2>
           <div className="mt-7 space-y-4">
             <label className="grid gap-2">
               <span className="label">Email</span>
@@ -87,9 +92,6 @@ export default function Login() {
             </label>
             {error && <div className="rounded-xl bg-red-50 px-4 py-3 text-sm font-medium text-danger">{error}</div>}
             <button className="btn-primary w-full" disabled={loading}>{loading ? 'Memproses...' : 'Masuk'}</button>
-          </div>
-          <div className="mt-6 rounded-xl bg-blue-soft p-4 text-sm text-slate">
-            Demo: `admin@smartstock.com/admin123`, `manager@smartstock.com/manager123`, `staff@smartstock.com/staff123`, `viewer@smartstock.com/viewer123`.
           </div>
         </form>
       </section>
